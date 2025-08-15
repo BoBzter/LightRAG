@@ -6,6 +6,10 @@ import os
 import argparse
 from typing import Optional, List, Tuple
 import sys
+import subprocess
+import tempfile
+import shutil
+from pathlib import Path
 from ascii_colors import ASCIIColors
 from lightrag.api import __api_version__ as api_version
 from lightrag import __version__ as core_version
@@ -342,3 +346,88 @@ def display_splash_screen(args: argparse.Namespace) -> None:
 
     # Ensure splash output flush to system log
     sys.stdout.flush()
+
+
+def is_poppler_available() -> bool:
+    """Check if poppler-utils (pdftotext) is available in the system"""
+    return shutil.which('pdftotext') is not None
+
+
+def extract_pdf_with_poppler(pdf_path: str, logger=None) -> Optional[str]:
+    """
+    Extract text from PDF using Poppler's pdftotext
+    
+    Args:
+        pdf_path: Path to the PDF file
+        logger: Optional logger instance for logging messages
+        
+    Returns:
+        Extracted text content or None if extraction fails
+    """
+    pdf_path = Path(pdf_path)
+    if not pdf_path.exists():
+        if logger:
+            logger.error(f"PDF file not found: {pdf_path}")
+        return None
+    
+    # Check if poppler is available
+    pdftotext_exe = shutil.which('pdftotext')
+    if not pdftotext_exe:
+        if logger:
+            logger.warning("pdftotext not found. Poppler-utils not installed.")
+        return None
+    
+    # Create temporary file for extraction
+    with tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False) as tmp:
+        tmp_path = tmp.name
+    
+    try:
+        # Run pdftotext with layout preservation
+        cmd = [
+            pdftotext_exe,
+            "-layout",  # Preserve layout
+            "-enc", "UTF-8",  # Force UTF-8 encoding
+            str(pdf_path),
+            tmp_path
+        ]
+        
+        result = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
+        
+        if result.returncode != 0:
+            if logger:
+                logger.error(f"pdftotext failed: {result.stderr}")
+            return None
+        
+        # Read and check extracted text
+        with open(tmp_path, 'r', encoding='utf-8') as f:
+            text = f.read()
+        
+        # Fix encoding if needed (CP1252 -> CP1251 for Russian PDFs)
+        if text and not any('\u0400' <= c <= '\u04FF' for c in text[:500]):
+            # Check if text has extended ASCII that might be misencoded Cyrillic
+            if any(ord(c) in range(128, 256) for c in text[:500]):
+                try:
+                    text = text.encode('cp1252').decode('cp1251')
+                    if logger:
+                        logger.info("Applied CP1252->CP1251 encoding fix for Russian text")
+                except Exception:
+                    # Keep original text if encoding fix fails
+                    pass
+        
+        return text
+        
+    except subprocess.TimeoutExpired:
+        if logger:
+            logger.error(f"pdftotext timed out processing {pdf_path}")
+        return None
+    except Exception as e:
+        if logger:
+            logger.error(f"Error extracting PDF with poppler: {str(e)}")
+        return None
+    finally:
+        # Clean up temp file
+        if os.path.exists(tmp_path):
+            try:
+                os.unlink(tmp_path)
+            except:
+                pass
