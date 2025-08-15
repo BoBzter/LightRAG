@@ -1895,6 +1895,12 @@ async def extract_entities(
         hint_prompt = entity_extract_prompt.format(
             **{**context_base, "input_text": content}
         )
+        
+        # Log the prompt being sent to LLM
+        logger.info(f"=== LLM PROMPT for chunk {chunk_key} ===")
+        logger.info(f"Prompt length: {len(hint_prompt)} characters")
+        logger.info(f"Full prompt:\n{hint_prompt}")
+        logger.info(f"=== END OF PROMPT ===")
 
         final_result = await use_llm_func_with_cache(
             hint_prompt,
