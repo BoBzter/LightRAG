@@ -24,7 +24,7 @@ from pydantic import BaseModel, Field, field_validator
 from lightrag import LightRAG
 from lightrag.base import DeletionResult, DocProcessingStatus, DocStatus
 from lightrag.utils import generate_track_id
-from lightrag.api.utils_api import get_combined_auth_dependency
+from lightrag.api.utils_api import get_combined_auth_dependency, is_poppler_available, extract_pdf_with_poppler
 from ..config import global_args
 
 
@@ -957,15 +957,36 @@ async def pipeline_enqueue_file(
                             result = converter.convert(file_path)
                             content = result.document.export_to_markdown()
                         else:
-                            if not pm.is_installed("pypdf2"):  # type: ignore
-                                pm.install("pypdf2")
-                            from PyPDF2 import PdfReader  # type: ignore
-                            from io import BytesIO
+                            # Try poppler first if available
+                            if is_poppler_available():
+                                extracted_text = extract_pdf_with_poppler(str(file_path), logger)
+                                if extracted_text:
+                                    content = extracted_text
+                                    logger.info(f"Successfully extracted PDF using poppler: {file_path.name}")
+                                else:
+                                    # Fallback to PyPDF2 if poppler extraction failed
+                                    logger.warning(f"Poppler extraction failed for {file_path.name}, falling back to PyPDF2")
+                                    if not pm.is_installed("pypdf2"):  # type: ignore
+                                        pm.install("pypdf2")
+                                    from PyPDF2 import PdfReader  # type: ignore
+                                    from io import BytesIO
 
-                            pdf_file = BytesIO(file)
-                            reader = PdfReader(pdf_file)
-                            for page in reader.pages:
-                                content += page.extract_text() + "\n"
+                                    pdf_file = BytesIO(file)
+                                    reader = PdfReader(pdf_file)
+                                    for page in reader.pages:
+                                        content += page.extract_text() + "\n"
+                            else:
+                                # Use PyPDF2 if poppler is not available
+                                logger.info("Poppler not available, using PyPDF2 for PDF extraction")
+                                if not pm.is_installed("pypdf2"):  # type: ignore
+                                    pm.install("pypdf2")
+                                from PyPDF2 import PdfReader  # type: ignore
+                                from io import BytesIO
+
+                                pdf_file = BytesIO(file)
+                                reader = PdfReader(pdf_file)
+                                for page in reader.pages:
+                                    content += page.extract_text() + "\n"
                     except Exception as e:
                         error_files = [
                             {
