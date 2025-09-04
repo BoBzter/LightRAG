@@ -37,14 +37,48 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      rerank:
+        condition: service_healthy
     restart: unless-stopped
     networks:
       - lightrag-network
     extra_hosts:
       - "host.docker.internal:host-gateway"
 
+  rerank:
+    image: ghcr.io/huggingface/text-embeddings-inference:1.5
+    container_name: lightrag-rerank
+    command: >
+      --model-id BAAI/bge-reranker-v2-m3
+      --port 8080
+      --max-batch-tokens 8192
+      --max-client-batch-size 32
+    ports:
+      - "8080:8080"
+    environment:
+      - HUGGING_FACE_HUB_TOKEN=${HUGGING_FACE_HUB_TOKEN:-}
+      - HF_HUB_ENABLE_HF_TRANSFER=1
+    volumes:
+      - hf-cache:/data
+    networks:
+      - lightrag-network
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
 volumes:
   postgres_data:
+  hf-cache:
 
 networks:
   lightrag-network:
