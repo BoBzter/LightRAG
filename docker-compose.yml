@@ -46,20 +46,22 @@ services:
       - "host.docker.internal:host-gateway"
 
   rerank:
-    image: ghcr.io/huggingface/text-embeddings-inference:1.5
+    image: vllm/vllm-openai:latest
     container_name: lightrag-rerank
     command: >
-      --model-id BAAI/bge-reranker-v2-m3
+      --model BAAI/bge-reranker-v2-m3
+      --task score
+      --dtype float16
+      --max-model-len 1024
       --port 8080
-      --max-batch-tokens 8192
-      --max-client-batch-size 32
+      --trust-remote-code
     ports:
       - "8080:8080"
     environment:
       - HUGGING_FACE_HUB_TOKEN=${HUGGING_FACE_HUB_TOKEN:-}
-      - HF_HUB_ENABLE_HF_TRANSFER=1
+      - HF_HOME=/root/.cache/huggingface
     volumes:
-      - hf-cache:/data
+      - hf-cache:/root/.cache/huggingface
     networks:
       - lightrag-network
     deploy:
@@ -71,8 +73,8 @@ services:
               capabilities: [gpu]
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
-      interval: 30s
-      timeout: 10s
+      interval: 600s
+      timeout: 20s
       retries: 5
       start_period: 60s
 
