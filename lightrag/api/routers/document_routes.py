@@ -352,6 +352,69 @@ class DeleteRelationRequest(BaseModel):
         return entity_name.strip()
 
 
+class MergeEntitiesRequest(BaseModel):
+    """Request model for merging multiple entities into a single entity"""
+    source_entities: List[str] = Field(
+        ...,
+        description="List of source entity names to merge (minimum 2)",
+        min_length=2
+    )
+    target_entity: str = Field(
+        ...,
+        description="Name of the target entity after merging"
+    )
+    merge_strategy: Optional[Dict[str, str]] = Field(
+        default=None,
+        description="Merge strategy for each field. Options: 'concatenate', 'keep_first', 'keep_last', 'join_unique'"
+    )
+    target_entity_data: Optional[Dict[str, Any]] = Field(
+        default=None,
+        description="Specific values to set for the target entity, overriding merged values"
+    )
+
+    @field_validator("source_entities", mode="before")
+    @classmethod
+    def validate_source_entities(cls, entities: List[str]) -> List[str]:
+        if not entities or len(entities) < 2:
+            raise ValueError("At least 2 source entities are required for merging")
+        # Remove duplicates and empty strings
+        cleaned = list(set(e.strip() for e in entities if e and e.strip()))
+        if len(cleaned) < 2:
+            raise ValueError("At least 2 unique source entities are required")
+        return cleaned
+
+    @field_validator("target_entity", mode="after")
+    @classmethod
+    def validate_target_entity(cls, entity_name: str) -> str:
+        if not entity_name or not entity_name.strip():
+            raise ValueError("Target entity name cannot be empty")
+        return entity_name.strip()
+
+
+class MergeEntitiesResponse(BaseModel):
+    """Response model for entity merge operation"""
+    success: bool = Field(description="Whether the merge was successful")
+    message: str = Field(description="Status message")
+    target_entity: str = Field(description="Name of the resulting merged entity")
+    entities_merged: int = Field(description="Number of entities merged")
+    relationships_transferred: Optional[int] = Field(
+        default=None,
+        description="Number of relationships transferred to the target entity"
+    )
+    entity_type: Optional[str] = Field(
+        default=None,
+        description="Type of the merged entity"
+    )
+    description: Optional[str] = Field(
+        default=None,
+        description="Description of the merged entity"
+    )
+    merge_summary: Optional[Dict[str, Any]] = Field(
+        default=None,
+        description="Summary of the merge operation including strategy used"
+    )
+
+
 class DocStatusResponse(BaseModel):
     id: str = Field(description="Document identifier")
     content_summary: str = Field(description="Summary of document content")
@@ -2454,6 +2517,72 @@ def create_document_routes(
 
         except Exception as e:
             logger.error(f"Error getting document status counts: {str(e)}")
+            logger.error(traceback.format_exc())
+            raise HTTPException(status_code=500, detail=str(e))
+
+    @router.post(
+        "/merge_entities",
+        response_model=MergeEntitiesResponse,
+        summary="Merge multiple entities into one",
+        description="Merges one or more source entities into a target entity in the graph",
+        tags=["Document Management", "Graph Operations"],
+        responses={
+            200: {
+                "description": "Entities merged successfully",
+                "model": MergeEntitiesResponse
+            },
+            400: {
+                "description": "Invalid request parameters"
+            },
+            404: {
+                "description": "One or more entities not found"
+            },
+            500: {
+                "description": "Internal server error"
+            }
+        }
+    )
+    async def merge_entities(request: MergeEntitiesRequest) -> MergeEntitiesResponse:
+        """
+        Merge multiple source entities into a target entity.
+
+        This endpoint allows merging one or more source entities into a single target entity.
+        The merge strategy determines how entity properties are combined. All relationships
+        from source entities are transferred to the target entity.
+
+        Args:
+            request: MergeEntitiesRequest containing source entities, target entity,
+                    merge strategy, and optional target entity data
+
+        Returns:
+            MergeEntitiesResponse: Contains the merged entity name and operation statistics
+
+        Raises:
+            HTTPException: If entities don't exist or merge operation fails
+        """
+        try:
+            # Perform the merge operation
+            result = await rag.amerge_entities(
+                source_entities=request.source_entities,
+                target_entity=request.target_entity,
+                merge_strategy=request.merge_strategy,
+                target_entity_data=request.target_entity_data
+            )
+
+            # Return response with merge results
+            return MergeEntitiesResponse(
+                success=True,
+                message=f"Successfully merged {len(request.source_entities)} entities into '{request.target_entity}'",
+                target_entity=request.target_entity,
+                entities_merged=len(request.source_entities),
+                relationships_transferred=result.get("relationships_transferred", 0),
+                entity_type=result.get("entity_type"),
+                description=result.get("description"),
+                merge_summary={"merge_strategy": request.merge_strategy}
+            )
+
+        except Exception as e:
+            logger.error(f"Error merging entities: {str(e)}")
             logger.error(traceback.format_exc())
             raise HTTPException(status_code=500, detail=str(e))
 

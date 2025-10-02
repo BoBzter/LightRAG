@@ -82,7 +82,7 @@ It was a small transformation, barely perceptible, but one that Alex noted with 
     """[Example 2]
 
 ---Input---
-Entity_types: [organization,person,location,event,technology,equipment,product,document,category]]
+Entity_types: [organization,person,location,event,technology,equipment,product,document,category]
 Text:
 ```
 Stock markets faced a sharp downturn today as tech giants saw significant declines, with the Global Tech Index dropping by 3.4% in midday trading. Analysts attribute the selloff to investor concerns over rising interest rates and regulatory uncertainty.
@@ -113,7 +113,7 @@ Financial experts are closely watching the Federal Reserve's next move, as specu
     """[Example 3]
 
 ---Input---
-Entity_types: [organization,person,location,event,technology,equipment,product,document,category]]
+Entity_types: [organization,person,location,event,technology,equipment,product,document,category]
 Text:
 ```
 At the World Athletics Championship in Tokyo, Noah Carter broke the 100m sprint record using cutting-edge carbon-fiber spikes.
@@ -136,7 +136,7 @@ At the World Athletics Championship in Tokyo, Noah Carter broke the 100m sprint 
     """[Example 4]
 
 ---Input---
-Entity_types: [organization,person,location,event,technology,equipment,product,document,category]]
+Entity_types: [organization,person,location,event,technology,equipment,product,document,category]
 Text:
 ```
 На технологической конференции в Москве генеральный директор компании "Яндекс" Аркадий Волож представил новую нейросетевую модель "YandexGPT", которая достигла прорыва в области обработки русского языка и мультимодального анализа.

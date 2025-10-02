@@ -32,10 +32,13 @@ services:
       - ./data/inputs:/app/data/inputs
       - ./config.ini:/app/config.ini
       - ./.env:/app/.env
+      - ./lightrag:/app/lightrag
     env_file:
       - .env
     depends_on:
       postgres:
+        condition: service_healthy
+      embeddings:
         condition: service_healthy
       rerank:
         condition: service_healthy
@@ -44,6 +47,42 @@ services:
       - lightrag-network
     extra_hosts:
       - "host.docker.internal:host-gateway"
+    dns:
+      - 8.8.8.8
+      - 8.8.4.4
+
+  embeddings:
+    image: vllm/vllm-openai:latest
+    container_name: lightrag-embeddings
+    command: >
+      --model BAAI/bge-m3
+      --task embed
+      --dtype float16
+      --max-model-len 8192
+      --port 8081
+      --trust-remote-code
+    ports:
+      - "8081:8081"
+    environment:
+      - HUGGING_FACE_HUB_TOKEN=${HUGGING_FACE_HUB_TOKEN:-}
+      - HF_HOME=/root/.cache/huggingface
+    volumes:
+      - hf-cache:/root/.cache/huggingface
+    networks:
+      - lightrag-network
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8081/health"]
+      interval: 600s
+      timeout: 10s
+      retries: 5
+      start_period: 120s
 
   rerank:
     image: vllm/vllm-openai:latest
